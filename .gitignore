@@ -11,3 +11,5 @@
 .Rdata
 .httr-oauth
 .DS_Store
+
+/notebooks/LCMS/data_raw
