@@ -1,6 +1,6 @@
 ---
-title: Explore Earthquakes
-author: Charlotte Wickham
+title: Notes
+author: John doe
 ---
 
 ```{r}

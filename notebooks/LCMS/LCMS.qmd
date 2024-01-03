@@ -1,0 +1,260 @@
+---
+Title: LCMS 
+Author: Andreas Svendsen
+format:
+  html: 
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+editor_options: 
+  chunk_output_type: console
+---
+
+Setup
+
+```{r}
+library(readxl)
+library(data.table)
+library(ggplot2)
+library(patchwork)
+```
+
+## Donor 3, AS0013B, Midazolam
+
+**Load data**
+
+```{r}
+#| label: load raw data
+#| output: false
+#| warning: false
+
+# Ignore warnings. Just NA's as expected
+data <-
+  read_excel(
+    path = "notebooks/LCMS/data_raw/230628RAVERSION_Short.xlsx",
+    sheet = "Hydroxymidazolam",
+    skip = 4,
+    col_types = c(
+      "text", "skip", "skip", "skip",
+      "skip", "skip", "skip", "skip",
+      "numeric", "skip", "skip", "text",
+      "skip", "skip", "skip", "skip"
+    ),
+    col_names = c("sample_name", "amount", "peak_status")
+  )
+
+metabolite <- "Hydroxymidazolam"
+data$metabolite <- metabolite
+
+# Set as DT, and get only samples
+setDT(data)
+data <- data[grepl("AS", data$sample_name)] # get samples of interest
+```
+
+```{r}
+#| label: Load sample info and merge with raw data
+
+sample_info <- read_excel("notebooks/LCMS/data_raw/AS0013B_sample_info.xlsx")
+
+tidy_data <- merge.data.table(data, sample_info, by = "sample_name")
+
+# Check dt structure
+str(tidy_data)
+
+# Make treatment a factor
+tidy_data <- 
+  tidy_data[, 
+            treatment := factor(treatment,
+                                levels = c("control",
+                                           "medium",
+                                           "0.01 ng/ml IL-6",
+                                           "0.1 ng/ml IL-6",
+                                           "1 ng/ml IL-6",
+                                           "10 ng/ml IL-6",
+                                           "0.01 ng/ml IL-1B",
+                                           "0.1 ng/ml IL-1B",
+                                           "1 ng/ml IL-1B",
+                                           "10 ng/ml IL-1B"
+                                           ),
+                                ordered = TRUE
+                                )
+            ]
+```
+
+Check peak status' for any amounts below what below/above the limit of our standard curve.
+
+```{r}
+# Check peak status'
+unique(tidy_data$peak_status)
+# Find any that is not NA
+tidy_data[!is.na(peak_status)]
+
+```
+
+#### Should this be omitted? It is below the lowest point on our standard curve, but omitting it would make the mean higher, than it really is?
+
+**Mean of replicates and activity relative to vehicle control**
+
+```{r}
+# Calculate the mean amount of replicates
+tidy_data[, 
+          mean_amount := mean(amount, na.rm = TRUE), 
+          by = .(treatment, time_treatment, time_incubation)
+          ]
+
+# Calculate amounts relative to the control
+tidy_data[,
+          relative_amount := amount / mean_amount[treatment == "control"],
+          by = .(time_treatment, time_incubation)
+          ]
+
+# Calculate mean_amounts relative to control 
+tidy_data[,
+          mean_relative_amount := mean_amount / mean_amount[treatment == "control"],
+          by = .(time_treatment, time_incubation)]
+
+```
+
+**Plots**
+
+```{r}
+# Create groups/look up tables for subsetting data
+group_IL6 <- c("control", 
+               #"medium", 
+               "0.01 ng/ml IL-6", 
+               "0.1 ng/ml IL-6",
+               "1 ng/ml IL-6", 
+               "10 ng/ml IL-6"
+               )
+
+group_IL1B <- c("control", 
+                #"medium", 
+                "0.01 ng/ml IL-1B", 
+                "0.1 ng/ml IL-1B",
+                "1 ng/ml IL-1B",
+                "10 ng/ml IL-1B"
+                )
+
+```
+
+```{r}
+plot_data <- tidy_data[time_incubation == 0.5 &
+  treatment %in% c("control", "medium", "0.01 ng/ml IL-6", "0.1 ng/ml IL-6", "1 ng/ml IL-6", "10 ng/ml IL-6")]
+
+ggplot(data = plot_data) +
+  geom_point(
+    aes(
+      x = treatment,
+      y = mean_relative_amount,
+      color = factor(time_treatment)
+    ),
+    size = 5,
+    alpha = 0.7
+  ) +
+  geom_point(
+    aes(
+      x = treatment,
+      y = relative_amount
+    ),
+    size = 1
+  ) +
+  facet_wrap(
+    facets = vars(factor(time_treatment))
+  )
+
+```
+
+```{r}
+plot_data <- tidy_data[time_incubation == 0.5 &
+  treatment %in% c("control", "medium", "0.01 ng/ml IL-1B", "0.1 ng/ml IL-1B", "1 ng/ml IL-1B", "10 ng/ml IL-1B")]
+
+ggplot(data = plot_data) +
+  geom_point(
+    aes(
+      x = treatment,
+      y = mean_relative_amount,
+      color = factor(time_treatment)
+    ),
+    size = 5,
+    alpha = 0.7
+  ) +
+  geom_point(
+    aes(
+      x = treatment,
+      y = relative_amount
+    ),
+    size = 1
+  ) +
+  facet_wrap(
+    facets = vars(factor(time_treatment))
+  )
+```
+
+## Donor 2, AS0008, midazolam
+
+```{r}
+# Setup -------------------------------------------------------------------
+library(readxl)
+library(data.table)
+library(ggplot2)
+library(patchwork)
+
+# Info --------------------------------------------------------------------
+# Donor 2
+# 30 minute incubation time for mdz and omz.
+# 8 hour incubation time for efavirenz and metaprolol
+
+# Just make one sheet work
+# Get data
+mdz_data <-
+  read_excel(
+    path = "notebooks/LCMS/data_raw/220506_AS008_v1_Short.xlsx",
+    sheet = "Hydroxymidazolam",
+    skip = 4,
+    col_types = c(
+      "text", "skip", "skip", "skip",
+      "skip", "skip", "skip", "skip",
+      "numeric", "skip", "skip", "text",
+      "skip", "skip", "skip", "skip"
+    ),
+    col_names = c("sample_name", "amount", "peak_status")
+  )
+
+# Tidy data
+setDT(mdz_data)
+mdz_data <- mdz_data[grepl("AS", mdz_data$sample_name)] # get samples of interest
+# Check peak status'
+unique(mdz_data$peak_status)
+# Find any that is not NA
+mdz_data[!is.na(peak_status)]
+# Remove samples 152, 153, 162, 163, 172, and 173 as no baselcocktail was added to there wells, and that is why there is no peaks
+# Remove sample 171, as there was not spheroid in this. 
+# Note that to are left with "response low". 
+remove_samples <- mdz_data[!is.na(peak_status)][-c(1, 9)]
+
+mdz_data[]
+
+
+
+```
+
+```{r}
+sample_info <- read_excel("data_raw/lcms/AS0013B_sample_info.xlsx")
+
+tidy_data <- merge.data.table(mdz_data, sample_info, by = "sample_name")
+# Check dt structure
+str(tidy_data)
+
+samples <- mdz_data$sample_name
+samples <- list(samples)
+
+fwrite(samples, file = "notebooks/LCMS/data_raw/AS0008_sample_info.csv")
+```
+
+## To do
+
+Import all relevant sheets and create a big data table. Save this final data table.
+
+Create plots.
+
+Get the data from the second donor.
